@@ -54,25 +54,27 @@ The script needs to run continuously (or be invoked repeatedly) to keep shipping
 
 ### 1. Built-in loop (default, recommended for demos)
 
-The script already contains a `while True` loop with a configurable sleep. Just run it once and leave it:
+The program already contains a `for` loop with a configurable sleep. Just run it once and leave it:
 
 ```bash
-python main.py
+go run .
+# or the Python equivalent:
+python python/main.py
 ```
 
 Set `INTERVAL_SECONDS=60` in `.env` to control the cadence. Kill with `Ctrl+C`.
 
 ### 2. cron
 
-Invokes the script as a new process on a schedule. Simple, but each run is independent — no persistent state.
+Invokes the binary as a new process on a schedule. Simple, but each run is independent — no persistent state.
 
 ```bash
 crontab -e
 # add:
-* * * * * /usr/bin/python3 /Users/you/thinkocapo/infrastructure/main.py
+* * * * * /usr/local/go/bin/go run /Users/you/thinkocapo/infrastructure
 ```
 
-Note: if using this approach, remove the `while True` loop so each cron invocation does a single collection pass.
+Note: if using this approach, remove the `for` loop so each cron invocation does a single collection pass.
 
 ### 3. launchd (macOS native, production-grade)
 
@@ -109,15 +111,20 @@ launchctl load ~/Library/LaunchAgents/com.thinkocapo.infrastructure.plist
 
 ### 4. Docker (self-contained, portable)
 
-Run the script in a container with the built-in loop. Docker Desktop on Mac can pass through `/var/run/docker.sock` for Docker-in-Docker container stats:
+Run the Go binary in a container with the built-in loop. Docker Desktop on Mac can pass through `/var/run/docker.sock` so the container can still read stats from other running containers:
 
 ```dockerfile
-FROM python:3.11-slim
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
-CMD ["python", "main.py"]
+RUN go build -o infrastructure-monitor .
+
+FROM alpine:3.19
+WORKDIR /app
+COPY --from=builder /app/infrastructure-monitor .
+CMD ["./infrastructure-monitor"]
 ```
 
 ```bash
@@ -127,6 +134,8 @@ docker run -d \
   -v /var/run/docker.sock:/var/run/docker.sock \
   infrastructure-monitor
 ```
+
+The `-v /var/run/docker.sock` mount is what gives the container visibility into other containers' stats — without it, `collectors/docker.go` will get a connection error and skip Docker metrics gracefully.
 
 ---
 
