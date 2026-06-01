@@ -2,20 +2,36 @@
 
 Reads host metrics (CPU, memory, disk, network) from your MacBook and running Docker containers, then ships them to Sentry as application metrics.
 
-The pattern for adding more sources (Kubernetes, Postgres, Redis, etc.) is just another `collect_X_metrics()` function in `main.py` — same loop, same Sentry emit calls. One Sentry project and DSN is enough; differentiate sources with tags.
+The pattern for adding more sources (Kubernetes, Postgres, Redis, etc.) is just another collector file in `collectors/` — same loop, same Sentry emit calls. One Sentry project and DSN is enough; differentiate sources with tags.
+
+## Structure
+
+```
+main.go                  # entry point — init Sentry, run collector loop
+collectors/
+  host.go                # macOS host metrics via gopsutil
+  docker.go              # Docker container metrics via Docker Engine API
+python/                  # Python reference implementation (psutil + docker SDK)
+```
 
 ## Setup
 
+Install Go if needed:
 ```bash
-pip install -r requirements.txt
-cp .env.example .env
+brew install go
+```
+
+Then:
+```bash
+go mod tidy
+cp python/.env.example .env   # or create .env manually
 # edit .env and add your SENTRY_DSN
 ```
 
 ## Run
 
 ```bash
-python main.py
+go run .
 ```
 
 Collects and emits metrics every 60 seconds (configurable via `INTERVAL_SECONDS` in `.env`).
