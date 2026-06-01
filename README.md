@@ -129,3 +129,15 @@ Reads per-container stats from the Docker daemon. Each running container gets it
 | `docker.memory.percent` | `host`, `container` |
 
 Docker metrics are skipped gracefully if Docker is not running or the `docker` SDK is not installed.
+
+## Querying by source in the Sentry UI
+
+In the Sentry metrics explorer, use the `source` tag to filter or group by where metrics came from. Example tag schemes as more collectors are added:
+
+```python
+metrics.gauge("host.cpu.percent",   value, tags={"source": "psutil",     "host": "macbook"})
+metrics.gauge("docker.cpu.percent", value, tags={"source": "docker",     "container": "postgres"})
+metrics.gauge("k8s.pod.memory",     value, tags={"source": "kubernetes", "namespace": "default"})
+```
+
+In the UI: filter by `source = docker` to see only container metrics, or group by `container` to compare across containers. The `source` tag is the top-level discriminator; more specific tags (`host`, `container`, `namespace`) let you drill down within a source.
