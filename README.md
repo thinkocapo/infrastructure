@@ -2,6 +2,8 @@
 
 Reads host metrics (CPU, memory, disk, network) from your MacBook and running Docker containers, then ships them to Sentry as application metrics.
 
+The pattern for adding more sources (Kubernetes, Postgres, Redis, etc.) is just another `collect_X_metrics()` function in `main.py` — same loop, same Sentry emit calls. One Sentry project and DSN is enough; differentiate sources with tags.
+
 ## Setup
 
 ```bash
