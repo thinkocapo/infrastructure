@@ -4,6 +4,18 @@ Reads host metrics (CPU, memory, disk, network) from your MacBook and running Do
 
 The pattern for adding more sources (Kubernetes, Postgres, Redis, etc.) is just another collector file in `collectors/` — same loop, same Sentry emit calls. One Sentry project and DSN is enough; differentiate sources with tags.
 
+## Shared lineage with the Datadog agent
+
+Several libraries used here are the same ones the Datadog agent uses internally — this project is essentially the same collection pipeline, pointed at Sentry instead of Datadog's backend.
+
+| Library | Used here | Used by Datadog agent | Notes |
+|---|---|---|---|
+| `gopsutil/v3` | `collectors/host.go` | Yes | Reads CPU, memory, disk, network from the OS. Datadog uses this for their system-core check. |
+| `docker/docker/client` | `collectors/docker.go` | Yes | Official Docker Go SDK. Both query the Docker Engine API over `/var/run/docker.sock`. |
+| `psutil` (Python) | `python/main.py` | Yes | The Python original that `gopsutil` is ported from. Datadog's older Python checks used `psutil` directly. |
+
+The Datadog agent wraps these same libraries in ~450 "checks", schedules them every 15s, and forwards to Datadog's intake. This project does the same with two collectors and forwards to Sentry metrics.
+
 ## Structure
 
 ```
