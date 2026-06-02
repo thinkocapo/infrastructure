@@ -12,7 +12,6 @@ Several libraries used here are the same ones the Datadog agent uses internally 
 |---|---|---|---|
 | `gopsutil/v3` | `collectors/host.go` | Yes | Reads CPU, memory, disk, network from the OS. Datadog uses this for their system-core check. |
 | `docker/docker/client` | `collectors/docker.go` | Yes | Official Docker Go SDK. Both query the Docker Engine API over `/var/run/docker.sock`. |
-| `psutil` (Python) | `python/main.py` | Yes | The Python original that `gopsutil` is ported from. Datadog's older Python checks used `psutil` directly. |
 
 The Datadog agent wraps these same libraries in ~450 "checks", schedules them every 15s, and forwards to Datadog's intake. This project does the same with two collectors and forwards to Sentry metrics.
 
@@ -50,7 +49,7 @@ Collects and emits metrics every 60 seconds (configurable via `INTERVAL_SECONDS`
 
 ## Scheduling
 
-The script needs to run continuously (or be invoked repeatedly) to keep shipping metrics. Four options:
+The program needs to run continuously (or be invoked repeatedly) to keep shipping metrics. Four options:
 
 ### 1. Built-in loop (default, recommended for demos)
 
@@ -58,8 +57,6 @@ The program already contains a `for` loop with a configurable sleep. Just run it
 
 ```bash
 go run .
-# or the Python equivalent:
-python python/main.py
 ```
 
 Set `INTERVAL_SECONDS=60` in `.env` to control the cadence. Kill with `Ctrl+C`.
@@ -78,7 +75,11 @@ Note: if using this approach, remove the `for` loop so each cron invocation does
 
 ### 3. launchd (macOS native, production-grade)
 
-macOS's built-in job scheduler. More robust than cron — supports auto-restart on failure, logging, and boot-time launch. Create a plist at `~/Library/LaunchAgents/com.thinkocapo.infrastructure.plist`:
+macOS's built-in job scheduler. More robust than cron — supports auto-restart on failure, logging, and boot-time launch. Build the binary first, then create a plist at `~/Library/LaunchAgents/com.thinkocapo.infrastructure.plist`:
+
+```bash
+go build -o infrastructure-monitor .
+```
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -89,8 +90,7 @@ macOS's built-in job scheduler. More robust than cron — supports auto-restart 
     <string>com.thinkocapo.infrastructure</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/python3</string>
-        <string>/Users/you/thinkocapo/infrastructure/main.py</string>
+        <string>/Users/you/thinkocapo/infrastructure/infrastructure-monitor</string>
     </array>
     <key>StartInterval</key>
     <integer>60</integer>
@@ -141,19 +141,19 @@ The `-v /var/run/docker.sock` mount is what gives the container visibility into 
 
 ## Metrics emitted
 
-### Source 1: macOS host (`psutil`)
+### Source 1: macOS host (`gopsutil`)
 
-Reads directly from the macOS kernel — no dependencies beyond `psutil`.
+Reads directly from the macOS kernel via `gopsutil`.
 
 | Metric | Tags |
 |---|---|
-| `host.cpu.percent` | `host` |
-| `host.memory.used_mb` | `host` |
-| `host.memory.percent` | `host` |
-| `host.disk.used_gb` | `host` |
-| `host.disk.percent` | `host` |
-| `host.net.bytes_sent_mb` | `host` |
-| `host.net.bytes_recv_mb` | `host` |
+| `host.cpu.percent` | `source`, `host` |
+| `host.memory.used_mb` | `source`, `host` |
+| `host.memory.percent` | `source`, `host` |
+| `host.disk.used_gb` | `source`, `host` |
+| `host.disk.percent` | `source`, `host` |
+| `host.net.bytes_sent_mb` | `source`, `host` |
+| `host.net.bytes_recv_mb` | `source`, `host` |
 
 ### Source 2: Docker containers (Docker Engine API)
 
@@ -161,20 +161,20 @@ Reads per-container stats from the Docker daemon. Each running container gets it
 
 | Metric | Tags |
 |---|---|
-| `docker.cpu.percent` | `host`, `container` |
-| `docker.memory.used_mb` | `host`, `container` |
-| `docker.memory.percent` | `host`, `container` |
+| `docker.cpu.percent` | `source`, `host`, `container` |
+| `docker.memory.used_mb` | `source`, `host`, `container` |
+| `docker.memory.percent` | `source`, `host`, `container` |
 
-Docker metrics are skipped gracefully if Docker is not running or the `docker` SDK is not installed.
+Docker metrics are skipped gracefully if Docker is not running.
 
 ## Querying by source in the Sentry UI
 
 In the Sentry metrics explorer, use the `source` tag to filter or group by where metrics came from. Example tag schemes as more collectors are added:
 
-```python
-metrics.gauge("host.cpu.percent",   value, tags={"source": "psutil",     "host": "macbook"})
-metrics.gauge("docker.cpu.percent", value, tags={"source": "docker",     "container": "postgres"})
-metrics.gauge("k8s.pod.memory",     value, tags={"source": "kubernetes", "namespace": "default"})
+```go
+sentry.Metrics.Gauge("host.cpu.percent",   value, sentry.MetricTags({"source": "gopsutil",    "host": "macbook"}))
+sentry.Metrics.Gauge("docker.cpu.percent", value, sentry.MetricTags({"source": "docker",      "container": "postgres"}))
+sentry.Metrics.Gauge("k8s.pod.memory",     value, sentry.MetricTags({"source": "kubernetes",  "namespace": "default"}))
 ```
 
 In the UI: filter by `source = docker` to see only container metrics, or group by `container` to compare across containers. The `source` tag is the top-level discriminator; more specific tags (`host`, `container`, `namespace`) let you drill down within a source.
