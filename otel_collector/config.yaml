@@ -1,0 +1,22 @@
+receivers:
+  hostmetrics:
+    collection_interval: 60s
+    scrapers:
+      cpu:
+      memory:
+      disk:
+      network:
+
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 60s
+
+exporters:
+  sentry:
+    dsn: ${env:SENTRY_DSN}
+
+service:
+  pipelines:
+    metrics:
+      receivers: [hostmetrics, docker_stats]
+      exporters: [sentry]
