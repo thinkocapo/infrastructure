@@ -15,7 +15,7 @@ otelcol-contrib --config otel_collector/config.yaml  # OTel Collector mode
 
 **Direct SDK** — collection logic written in Go (`collectors/`), ships via Sentry SDK. More control, easier to hack on.
 
-**OTel Collector** — pre-built receivers handle collection, ships via OTel exporter. Vendor-neutral, closer to how production infra monitoring is set up. See `otel_collector/README.md` for setup.
+**OTel Collector** — pre-built receivers handle collection, ships via a custom Go exporter (`otel_collector/sentryexporter/`). The exporter was written from scratch since no official Sentry OTel metrics exporter exists — it receives `pmetric.Metrics` batches from the collector pipeline and translates each data point into a `sentry.Metrics.Gauge()` call. Vendor-neutral, closer to how production infra monitoring is set up. See `otel_collector/README.md` for setup.
 
 ## Structure
 
