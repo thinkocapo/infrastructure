@@ -4,6 +4,33 @@ Reads host metrics (CPU, memory, disk, network) from your MacBook and running Do
 
 The pattern for adding more sources (Kubernetes, Postgres, Redis, etc.) is just another collector file in `collectors/` — same loop, same Sentry emit calls. One Sentry project and DSN is enough; differentiate sources with tags.
 
+## Two modes
+
+Both point at the same Sentry project:
+
+```bash
+go run .                                              # direct SDK mode
+otelcol-contrib --config otel_collector/config.yaml  # OTel Collector mode
+```
+
+**Direct SDK** — collection logic written in Go (`collectors/`), ships via Sentry SDK. More control, easier to hack on.
+
+**OTel Collector** — pre-built receivers handle collection, ships via OTel exporter. Vendor-neutral, closer to how production infra monitoring is set up. See `otel_collector/README.md` for setup.
+
+## Structure
+
+```
+main.go                       # entry point — init Sentry, run collector loop
+collectors/
+  host.go                     # macOS host metrics via gopsutil
+  docker.go                   # Docker container metrics via Docker Engine API
+otel_collector/
+  config.yaml                 # OTel Collector pipeline config
+  README.md                   # setup instructions for OTel mode
+docker-compose.yml            # example containers to monitor (postgres, redis, nginx)
+python/                       # Python reference implementation
+```
+
 ## Shared lineage with the Datadog agent
 
 Several libraries used here are the same ones the Datadog agent uses internally — this project is essentially the same collection pipeline, pointed at Sentry instead of Datadog's backend.
@@ -15,16 +42,6 @@ Several libraries used here are the same ones the Datadog agent uses internally 
 
 The Datadog agent wraps these same libraries in ~450 "checks", schedules them every 15s, and forwards to Datadog's intake. This project does the same with two collectors and forwards to Sentry metrics.
 
-## Structure
-
-```
-main.go                  # entry point — init Sentry, run collector loop
-collectors/
-  host.go                # macOS host metrics via gopsutil
-  docker.go              # Docker container metrics via Docker Engine API
-python/                  # Python reference implementation (psutil + docker SDK)
-```
-
 ## Setup
 
 Install Go if needed:
@@ -35,11 +52,21 @@ brew install go
 Then:
 ```bash
 go mod tidy
-cp python/.env.example .env   # or create .env manually
+cp python/.env.example .env
 # edit .env and add your SENTRY_DSN
 ```
 
 ## Run
+
+### Spin up example containers to monitor
+
+```bash
+docker compose up
+```
+
+Starts Postgres, Redis, and Nginx — all picked up automatically by `collectors/docker.go`.
+
+### Start the monitor
 
 ```bash
 go run .
@@ -172,9 +199,9 @@ Docker metrics are skipped gracefully if Docker is not running.
 In the Sentry metrics explorer, use the `source` tag to filter or group by where metrics came from. Example tag schemes as more collectors are added:
 
 ```go
-sentry.Metrics.Gauge("host.cpu.percent",   value, sentry.MetricTags({"source": "gopsutil",    "host": "macbook"}))
-sentry.Metrics.Gauge("docker.cpu.percent", value, sentry.MetricTags({"source": "docker",      "container": "postgres"}))
-sentry.Metrics.Gauge("k8s.pod.memory",     value, sentry.MetricTags({"source": "kubernetes",  "namespace": "default"}))
+sentry.Metrics.Gauge("host.cpu.percent",   value, sentry.MetricTags({"source": "gopsutil",   "host": "macbook"}))
+sentry.Metrics.Gauge("docker.cpu.percent", value, sentry.MetricTags({"source": "docker",     "container": "postgres"}))
+sentry.Metrics.Gauge("k8s.pod.memory",     value, sentry.MetricTags({"source": "kubernetes", "namespace": "default"}))
 ```
 
 In the UI: filter by `source = docker` to see only container metrics, or group by `container` to compare across containers. The `source` tag is the top-level discriminator; more specific tags (`host`, `container`, `namespace`) let you drill down within a source.
