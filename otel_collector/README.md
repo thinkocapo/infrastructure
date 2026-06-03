@@ -8,47 +8,55 @@ Both modes collect the same data and ship to the same Sentry project. This one i
 
 ```
 hostmetricsreceiver  }
-                     }→  OTel Collector  →  Sentry OTel exporter  →  Sentry.io
+                     }→  OTel Collector  →  sentryexporter (custom)  →  Sentry metrics API
 dockerstatsreceiver  }
 ```
 
-No Go code involved — just the collector binary + `config.yaml`.
+The key piece is `sentryexporter/` — a custom OTel exporter that:
+1. Receives OTel `pmetric.Metrics` batches from the collector pipeline
+2. Walks the metrics tree (ResourceMetrics → ScopeMetrics → Metric → DataPoints)
+3. Translates each data point into a `sentry.Metrics.Gauge()` call
+4. Tags are pulled from both resource-level attributes (e.g. `host.name`) and datapoint-level attributes (e.g. `container.name`)
 
-## Setup
+### What OTel data types map to what
 
-### 1. Install the OTel Collector contrib distro
+| OTel metric type | Mapped to Sentry |
+|---|---|
+| `Gauge` | `sentry.Metrics.Gauge()` |
+| `Sum` (counter) | `sentry.Metrics.Gauge()` (Sentry has no counter type) |
+| `Histogram` | skipped (not supported yet) |
 
-The contrib distro includes the `docker_stats` receiver and Sentry exporter. Install via Homebrew:
+## Files
 
-```bash
-brew install opentelemetry-collector-contrib
+```
+otel_collector/
+  main.go                  # custom collector binary — wires receivers + sentryexporter
+  config.yaml              # pipeline config
+  sentryexporter/
+    exporter.go            # ConsumeMetrics() — translates OTel metrics to Sentry
+    factory.go             # registers the exporter with the collector
+    config.go              # DSN config
 ```
 
-Or download directly from:
-https://github.com/open-telemetry/opentelemetry-collector-contrib/releases
-
-### 2. Set your DSN
-
-The config reads `SENTRY_DSN` from the environment:
+## Build and run
 
 ```bash
+cd otel_collector
+
+# build the custom collector binary
+go build -o otelcol-sentry .
+
+# run it
 export SENTRY_DSN=https://a0fb37cd705816a19852120edcd719c9@o262702.ingest.us.sentry.io/4511492247584768
-```
-
-Or add it to your shell profile.
-
-### 3. Run the collector
-
-```bash
-otelcol-contrib --config ./otel_collector/config.yaml
+./otelcol-sentry --config config.yaml
 ```
 
 ## Comparing the two modes
 
-| | Go SDK (`go run .`) | OTel Collector |
+| | Go SDK (`go run .`) | OTel Collector (`./otelcol-sentry`) |
 |---|---|---|
 | Collection logic | written in Go (`collectors/`) | pre-built receivers in config |
 | Flexibility | full control over what/how | limited to receiver capabilities |
 | Vendor lock-in | Sentry SDK only | swap exporter to ship anywhere |
-| What to run | `go run .` | `otelcol-contrib --config ...` |
+| What to run | `go run .` from repo root | `./otelcol-sentry --config config.yaml` |
 | Good for | learning, custom metrics | production, vendor-neutral pipelines |
