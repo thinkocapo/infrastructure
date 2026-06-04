@@ -74,6 +74,40 @@ go run .
 
 Collects and emits metrics every 60 seconds (configurable via `INTERVAL_SECONDS` in `.env`).
 
+### Selecting which sources to run
+
+Each source is a named collector (`host`, `docker`). Pick which ones run with the
+`-collectors` flag (or the `COLLECTORS` env var). Order doesn't matter; empty = all.
+
+```bash
+go run . -collectors=host          # macOS host metrics only
+go run . -collectors=docker        # Docker container metrics only
+go run . -collectors=host,docker   # both (same as default)
+go run .                           # all registered collectors
+```
+
+```bash
+COLLECTORS=host go run .           # same, via env (handy for launchd/Docker)
+```
+
+The monitor prints which collectors are active on startup, e.g.
+`collectors: [host] — emitting every 60s`. Unknown names fail fast with the list
+of valid collectors.
+
+### Adding a third source
+
+The collector list lives in `collectors/registry.go`. To add one (Postgres, Redis,
+Kubernetes, …):
+
+1. Write a `CollectX(ctx context.Context)` function in a new file under `collectors/`
+   (follow the shape of `host.go` / `docker.go` — read values, call `sentry.Metrics.Gauge`).
+2. Add one line to `Registry`:
+   ```go
+   {Name: "postgres", Collect: CollectPostgres},
+   ```
+
+That's it — the `-collectors` flag, the run loop, and `-collectors=...` selection all pick it up automatically.
+
 ## Scheduling
 
 The program needs to run continuously (or be invoked repeatedly) to keep shipping metrics. Four options:
@@ -205,3 +239,36 @@ sentry.Metrics.Gauge("k8s.pod.memory",     value, sentry.MetricTags({"source": "
 ```
 
 In the UI: filter by `source = docker` to see only container metrics, or group by `container` to compare across containers. The `source` tag is the top-level discriminator; more specific tags (`host`, `container`, `namespace`) let you drill down within a source.
+
+## OTel Collector mode — adding source tags via Processor
+
+In the direct SDK mode (`go run .`), `source` tags are set explicitly in each collector. In the OTel Collector mode, `hostmetricsreceiver` and `dockerstatsreceiver` don't emit a `source` tag by default — you'd distinguish them only by metric name (e.g. `system.cpu.utilization` vs `container.cpu.percent`).
+
+To stamp a `source` tag on each pipeline explicitly, split into two pipelines with an `attributes` processor on each:
+
+```yaml
+processors:
+  attributes/host:
+    actions:
+      - key: source
+        value: gopsutil
+        action: insert
+  attributes/docker:
+    actions:
+      - key: source
+        value: docker
+        action: insert
+
+service:
+  pipelines:
+    metrics/host:
+      receivers: [hostmetrics]
+      processors: [attributes/host]
+      exporters: [sentry]
+    metrics/docker:
+      receivers: [docker_stats]
+      processors: [attributes/docker]
+      exporters: [sentry]
+```
+
+This lets you filter by `source = gopsutil` or `source = docker` in the Sentry UI, matching the same tag structure used in direct SDK mode.
