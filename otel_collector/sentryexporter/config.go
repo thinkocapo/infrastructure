@@ -1,5 +1,7 @@
 package sentryexporter
 
+import "fmt"
+
 // Config holds the configuration for the Sentry exporter.
 type Config struct {
 	// DSN is the Sentry Data Source Name for your project.
