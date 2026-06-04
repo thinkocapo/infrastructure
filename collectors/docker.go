@@ -7,8 +7,8 @@ import (
 	"io"
 
 	sentry "github.com/getsentry/sentry-go"
-	dockerclient "github.com/docker/docker/client"
-	"github.com/docker/docker/api/types/container"
+	"github.com/getsentry/sentry-go/attribute"
+	dockerclient "github.com/moby/moby/client"
 )
 
 func CollectDocker(ctx context.Context) {
@@ -19,16 +19,18 @@ func CollectDocker(ctx context.Context) {
 	}
 	defer cli.Close()
 
-	containers, err := cli.ContainerList(ctx, container.ListOptions{})
+	result, err := cli.ContainerList(ctx, dockerclient.ContainerListOptions{})
 	if err != nil {
 		fmt.Printf("  [docker] error listing containers: %v\n", err)
 		return
 	}
 
-	for _, c := range containers {
+	m := sentry.NewMeter(ctx)
+
+	for _, c := range result.Items {
 		name := c.Names[0][1:] // strip leading "/"
 
-		resp, err := cli.ContainerStats(ctx, c.ID, false)
+		resp, err := cli.ContainerStats(ctx, c.ID, dockerclient.ContainerStatsOptions{Stream: false})
 		if err != nil {
 			fmt.Printf("  [docker] error reading stats for %s: %v\n", name, err)
 			continue
@@ -49,10 +51,14 @@ func CollectDocker(ctx context.Context) {
 			memPct = (float64(stats.MemoryStats.Usage) / memLimit) * 100
 		}
 
-		tags := map[string]string{"source": "docker", "host": "macbook", "container": name}
-		sentry.Metrics.Gauge("docker.cpu.percent", cpuPct, sentry.MetricTags(tags))
-		sentry.Metrics.Gauge("docker.memory.used_mb", memUsedMB, sentry.MetricTags(tags))
-		sentry.Metrics.Gauge("docker.memory.percent", memPct, sentry.MetricTags(tags))
+		attrs := []attribute.Builder{
+			attribute.String("source", "docker"),
+			attribute.String("host", "macbook"),
+			attribute.String("container", name),
+		}
+		m.Gauge("docker.cpu.percent", cpuPct, sentry.WithAttributes(attrs...))
+		m.Gauge("docker.memory.used_mb", memUsedMB, sentry.WithAttributes(attrs...))
+		m.Gauge("docker.memory.percent", memPct, sentry.WithAttributes(attrs...))
 
 		fmt.Printf("  [docker] %s  cpu=%.1f%%  mem=%.1fMB (%.1f%%)\n", name, cpuPct, memUsedMB, memPct)
 	}
