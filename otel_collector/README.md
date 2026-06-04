@@ -40,16 +40,19 @@ otel_collector/
 
 ## Build and run
 
+The OTel Collector binary reads `SENTRY_DSN` from the shell environment — it doesn't use `godotenv` like `main.go` does. Use `source` to load the root `.env` file (already gitignored) before running:
+
 ```bash
 cd otel_collector
 
 # build the custom collector binary
 go build -o otelcol-sentry .
 
-# run it
-export SENTRY_DSN=https://a0fb37cd705816a19852120edcd719c9@o262702.ingest.us.sentry.io/4511492247584768
-./otelcol-sentry --config config.yaml
+# load DSN from root .env and run
+source ../.env && ./otelcol-sentry --config config.yaml
 ```
+
+No DSN in shell history, nothing committed to source.
 
 ## Comparing the two modes
 
