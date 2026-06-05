@@ -1,6 +1,6 @@
 # infrastructure
 
-<img src="sentry_screenshot_infra.png" width="50%" alt="Sentry infrastructure metrics dashboard">
+<img src="sentry_metrics.png" width="50%" alt="Sentry infrastructure metrics dashboard">
 
 Reads host metrics (CPU, memory, disk, network) from your MacBook and running Docker containers, then ships them to Sentry as application metrics.
 
