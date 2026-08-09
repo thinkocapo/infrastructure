@@ -8,12 +8,15 @@ import (
 // Collector is a named metrics source.
 //
 // To add a third source (e.g. Postgres, Redis, Kubernetes):
-//  1. write a CollectX(ctx context.Context) function in its own file
+//  1. write a CollectX(ctx context.Context) error function in its own file
 //  2. add one line to Registry below
 // Everything else — flag parsing, the run loop — picks it up automatically.
+// Collect should keep gathering whatever metrics it can even when part of
+// a run fails, and return a non-nil error describing what went wrong so
+// the caller can report collector health as its own metric.
 type Collector struct {
 	Name    string
-	Collect func(ctx context.Context)
+	Collect func(ctx context.Context) error
 }
 
 // Registry is the list of all available collectors.

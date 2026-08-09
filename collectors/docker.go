@@ -3,6 +3,7 @@ package collectors
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -11,21 +12,27 @@ import (
 	dockerclient "github.com/moby/moby/client"
 )
 
-func CollectDocker(ctx context.Context) {
+// CollectDocker reads per-container stats and ships them to Sentry. A
+// failure reading one container's stats is logged and skipped rather than
+// aborting the whole run; all such failures are joined into the returned
+// error so the caller can report collector health.
+func CollectDocker(ctx context.Context) error {
 	cli, err := dockerclient.NewClientWithOpts(dockerclient.FromEnv, dockerclient.WithAPIVersionNegotiation())
 	if err != nil {
 		fmt.Printf("  [docker] unavailable: %v\n", err)
-		return
+		return fmt.Errorf("connect: %w", err)
 	}
 	defer cli.Close()
 
 	result, err := cli.ContainerList(ctx, dockerclient.ContainerListOptions{})
 	if err != nil {
 		fmt.Printf("  [docker] error listing containers: %v\n", err)
-		return
+		return fmt.Errorf("list containers: %w", err)
 	}
 
 	m := sentry.NewMeter(ctx)
+	host := HostTag()
+	var errs []error
 
 	for _, c := range result.Items {
 		name := c.Names[0][1:] // strip leading "/"
@@ -33,6 +40,7 @@ func CollectDocker(ctx context.Context) {
 		resp, err := cli.ContainerStats(ctx, c.ID, dockerclient.ContainerStatsOptions{Stream: false})
 		if err != nil {
 			fmt.Printf("  [docker] error reading stats for %s: %v\n", name, err)
+			errs = append(errs, fmt.Errorf("stats %s: %w", name, err))
 			continue
 		}
 
@@ -40,6 +48,7 @@ func CollectDocker(ctx context.Context) {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err := json.Unmarshal(body, &stats); err != nil {
+			errs = append(errs, fmt.Errorf("decode stats %s: %w", name, err))
 			continue
 		}
 
@@ -53,7 +62,7 @@ func CollectDocker(ctx context.Context) {
 
 		attrs := []attribute.Builder{
 			attribute.String("source", "docker"),
-			attribute.String("host", "macbook"),
+			attribute.String("host", host),
 			attribute.String("container", name),
 		}
 		m.Gauge("docker.cpu.percent", cpuPct, sentry.WithAttributes(attrs...))
@@ -62,6 +71,8 @@ func CollectDocker(ctx context.Context) {
 
 		fmt.Printf("  [docker] %s  cpu=%.1f%%  mem=%.1fMB (%.1f%%)\n", name, cpuPct, memUsedMB, memPct)
 	}
+
+	return errors.Join(errs...)
 }
 
 func calcCPUPercent(stats dockerStatsJSON) float64 {

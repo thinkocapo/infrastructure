@@ -11,6 +11,7 @@ import (
 	"time"
 
 	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/joho/godotenv"
 
 	"github.com/thinkocapo/infrastructure/collectors"
@@ -73,9 +74,37 @@ func main() {
 	for {
 		fmt.Printf("[%s] collecting metrics...\n", time.Now().Format("15:04:05"))
 		for _, c := range chosen {
-			c.Collect(ctx)
+			start := time.Now()
+			err := c.Collect(ctx)
+			reportCollectorHealth(ctx, c.Name, time.Since(start), err)
 		}
 		fmt.Println()
 		time.Sleep(time.Duration(interval) * time.Second)
 	}
+}
+
+// reportCollectorHealth ships self-monitoring signal for a single collector
+// run: an up/down gauge and a duration gauge, always; plus a captured
+// Sentry exception when the collector reported an error, so a broken
+// collector shows up as an issue, not just a silent gap in the metrics.
+func reportCollectorHealth(ctx context.Context, name string, dur time.Duration, err error) {
+	m := sentry.NewMeter(ctx)
+	attrs := []attribute.Builder{
+		attribute.String("source", "monitor"),
+		attribute.String("host", collectors.HostTag()),
+		attribute.String("collector", name),
+	}
+
+	up := 1.0
+	if err != nil {
+		up = 0.0
+		fmt.Printf("  [monitor] %s reported errors: %v\n", name, err)
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("collector", name)
+			sentry.CaptureException(err)
+		})
+	}
+
+	m.Gauge("monitor.collector.up", up, sentry.WithAttributes(attrs...))
+	m.Gauge("monitor.collector.duration_ms", float64(dur.Milliseconds()), sentry.WithAttributes(attrs...))
 }

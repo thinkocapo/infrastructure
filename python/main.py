@@ -2,7 +2,7 @@ import time
 import psutil
 import sentry_sdk
 from sentry_sdk import metrics
-from config import SENTRY_DSN, INTERVAL_SECONDS
+from config import SENTRY_DSN, INTERVAL_SECONDS, HOST_TAG
 
 try:
     import docker
@@ -24,13 +24,13 @@ def collect_host_metrics():
     disk = psutil.disk_usage("/")
     net = psutil.net_io_counters()
 
-    metrics.gauge("host.cpu.percent", cpu, tags={"host": "macbook"})
-    metrics.gauge("host.memory.used_mb", mem.used / 1024 / 1024, tags={"host": "macbook"})
-    metrics.gauge("host.memory.percent", mem.percent, tags={"host": "macbook"})
-    metrics.gauge("host.disk.used_gb", disk.used / 1024 / 1024 / 1024, tags={"host": "macbook"})
-    metrics.gauge("host.disk.percent", disk.percent, tags={"host": "macbook"})
-    metrics.gauge("host.net.bytes_sent_mb", net.bytes_sent / 1024 / 1024, tags={"host": "macbook"})
-    metrics.gauge("host.net.bytes_recv_mb", net.bytes_recv / 1024 / 1024, tags={"host": "macbook"})
+    metrics.gauge("host.cpu.percent", cpu, tags={"host": HOST_TAG})
+    metrics.gauge("host.memory.used_mb", mem.used / 1024 / 1024, tags={"host": HOST_TAG})
+    metrics.gauge("host.memory.percent", mem.percent, tags={"host": HOST_TAG})
+    metrics.gauge("host.disk.used_gb", disk.used / 1024 / 1024 / 1024, tags={"host": HOST_TAG})
+    metrics.gauge("host.disk.percent", disk.percent, tags={"host": HOST_TAG})
+    metrics.gauge("host.net.bytes_sent_mb", net.bytes_sent / 1024 / 1024, tags={"host": HOST_TAG})
+    metrics.gauge("host.net.bytes_recv_mb", net.bytes_recv / 1024 / 1024, tags={"host": HOST_TAG})
 
     print(f"  [host] cpu={cpu}%  mem={mem.percent}%  disk={disk.percent}%")
 
@@ -62,7 +62,7 @@ def collect_docker_metrics():
             mem_limit = stats["memory_stats"].get("limit", 1) / 1024 / 1024
             mem_pct = (mem_usage / mem_limit) * 100 if mem_limit > 0 else 0.0
 
-            tags = {"host": "macbook", "container": name}
+            tags = {"host": HOST_TAG, "container": name}
             metrics.gauge("docker.cpu.percent", cpu_pct, tags=tags)
             metrics.gauge("docker.memory.used_mb", mem_usage, tags=tags)
             metrics.gauge("docker.memory.percent", mem_pct, tags=tags)
