@@ -33,25 +33,7 @@ docker-compose.yml            # example containers to monitor (postgres, redis, 
 python/                       # Python reference implementation
 ```
 
-## Shared lineage with the Datadog agent
-
-Several libraries used here are the same ones the Datadog agent uses internally — this project is essentially the same collection pipeline, pointed at Sentry instead of Datadog's backend.
-
-| Library | Used here | Used by Datadog agent | Notes |
-|---|---|---|---|
-| `gopsutil/v3` | `collectors/host.go` | Yes | Reads CPU, memory, disk, network from the OS. Datadog uses this for their system-core check. |
-| `docker/docker/client` | `collectors/docker.go` | Yes | Official Docker Go SDK. Both query the Docker Engine API over `/var/run/docker.sock`. |
-
-The Datadog agent wraps these same libraries in ~450 "checks", schedules them every 15s, and forwards to Datadog's intake. This project does the same with two collectors and forwards to Sentry metrics.
-
 ## Setup
-
-Install Go if needed:
-```bash
-brew install go
-```
-
-Then:
 ```bash
 go mod tidy
 cp python/.env.example .env
@@ -109,98 +91,6 @@ Kubernetes, …):
    ```
 
 That's it — the `-collectors` flag, the run loop, and `-collectors=...` selection all pick it up automatically.
-
-## Scheduling
-
-The program needs to run continuously (or be invoked repeatedly) to keep shipping metrics. Four options:
-
-### 1. Built-in loop (default, recommended for demos)
-
-The program already contains a `for` loop with a configurable sleep. Just run it once and leave it:
-
-```bash
-go run .
-```
-
-Set `INTERVAL_SECONDS=60` in `.env` to control the cadence. Kill with `Ctrl+C`.
-
-### 2. cron
-
-Invokes the binary as a new process on a schedule. Simple, but each run is independent — no persistent state.
-
-```bash
-crontab -e
-# add:
-* * * * * /usr/local/go/bin/go run /Users/you/thinkocapo/infrastructure
-```
-
-Note: if using this approach, remove the `for` loop so each cron invocation does a single collection pass.
-
-### 3. launchd (macOS native, production-grade)
-
-macOS's built-in job scheduler. More robust than cron — supports auto-restart on failure, logging, and boot-time launch. Build the binary first, then create a plist at `~/Library/LaunchAgents/com.thinkocapo.infrastructure.plist`:
-
-```bash
-go build -o infrastructure-monitor .
-```
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.thinkocapo.infrastructure</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/Users/you/thinkocapo/infrastructure/infrastructure-monitor</string>
-    </array>
-    <key>StartInterval</key>
-    <integer>60</integer>
-    <key>StandardOutPath</key>
-    <string>/tmp/infrastructure.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/infrastructure.err</string>
-    <key>RunAtLoad</key>
-    <true/>
-</dict>
-</plist>
-```
-
-Load it with:
-```bash
-launchctl load ~/Library/LaunchAgents/com.thinkocapo.infrastructure.plist
-```
-
-### 4. Docker (self-contained, portable)
-
-Run the Go binary in a container with the built-in loop. Docker Desktop on Mac can pass through `/var/run/docker.sock` so the container can still read stats from other running containers:
-
-```dockerfile
-FROM golang:1.22-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN go build -o infrastructure-monitor .
-
-FROM alpine:3.19
-WORKDIR /app
-COPY --from=builder /app/infrastructure-monitor .
-CMD ["./infrastructure-monitor"]
-```
-
-```bash
-docker build -t infrastructure-monitor .
-docker run -d \
-  --env-file .env \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  infrastructure-monitor
-```
-
-The `-v /var/run/docker.sock` mount is what gives the container visibility into other containers' stats — without it, `collectors/docker.go` will get a connection error and skip Docker metrics gracefully.
-
----
 
 ## Metrics emitted
 
