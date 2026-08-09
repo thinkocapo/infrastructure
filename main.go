@@ -31,6 +31,7 @@ func main() {
 
 	selection := *collectorsFlag
 	if selection == "" {
+		// can also define collectors in this .env variable
 		selection = os.Getenv("COLLECTORS")
 	}
 

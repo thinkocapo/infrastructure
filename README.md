@@ -29,36 +29,36 @@ collectors/
 otel_collector/
   config.yaml                 # OTel Collector pipeline config
   README.md                   # setup instructions for OTel mode
-docker-compose.yml            # example containers to monitor (postgres, redis, nginx)
-python/                       # Python reference implementation
+Dockerfile                    # builds the monitor into a container image (local build only)
+docker-compose.yml            # example containers to monitor (postgres, redis, nginx) + optional monitor service
 ```
 
 ## Setup
 ```bash
 go mod tidy
-cp python/.env.example .env
+cp .env.example .env
 # edit .env and add your SENTRY_DSN
 ```
 
 ## Run
 
-### Spin up example containers to monitor
+### Run everything in Docker (sample containers + the monitor)
 
+1. 
 ```bash
-docker compose up
+docker compose up -d --build
 ```
 
-Starts Postgres, Redis, and Nginx — all picked up automatically by `collectors/docker.go`.
+Now you have 3 containers for nginx, postgres, redix, and a 4th that's the monitor itself (Golang scripts in /collectors which use Sentry SDK's to gather metrics from the 3 containers)
 
-### Start the monitor
+### Run docker containers separately from the monitor
 
+1. Starts Postgres, Redis, and Nginx only — skips `infra-monitor`, so it's safe to pair with `go run .` below without shipping duplicate metrics.
 ```bash
-go run .
+docker compose up -d postgres redis nginx
 ```
 
-Collects and emits metrics every 60 seconds (configurable via `INTERVAL_SECONDS` in `.env`).
-
-### Selecting which sources to run
+2. Start the monitor
 
 Each source is a named collector (`host`, `docker`). Pick which ones run with the
 `-collectors` flag (or the `COLLECTORS` env var). Order doesn't matter; empty = all.
@@ -70,29 +70,7 @@ go run . -collectors=host,docker   # both (same as default)
 go run .                           # all registered collectors
 ```
 
-```bash
-COLLECTORS=host go run .           # same, via env (handy for launchd/Docker)
-```
-
-The monitor prints which collectors are active on startup, e.g.
-`collectors: [host] — emitting every 60s`. Unknown names fail fast with the list
-of valid collectors.
-
-### Adding a third source
-
-The collector list lives in `collectors/registry.go`. To add one (Postgres, Redis,
-Kubernetes, …):
-
-1. Write a `CollectX(ctx context.Context)` function in a new file under `collectors/`
-   (follow the shape of `host.go` / `docker.go` — read values, call `sentry.Metrics.Gauge`).
-2. Add one line to `Registry`:
-   ```go
-   {Name: "postgres", Collect: CollectPostgres},
-   ```
-
-That's it — the `-collectors` flag, the run loop, and `-collectors=...` selection all pick it up automatically.
-
-## Metrics emitted
+## Metrics
 
 ### Source 1: macOS host (`gopsutil`)
 
@@ -164,3 +142,17 @@ service:
 ```
 
 This lets you filter by `source = gopsutil` or `source = docker` in the Sentry UI, matching the same tag structure used in direct SDK mode.
+
+## Development - Adding a third source
+
+The collector list lives in `collectors/registry.go`. To add one (Postgres, Redis,
+Kubernetes, …):
+
+1. Write a `CollectX(ctx context.Context)` function in a new file under `collectors/`
+   (follow the shape of `host.go` / `docker.go` — read values, call `sentry.Metrics.Gauge`).
+2. Add one line to `Registry`:
+   ```go
+   {Name: "postgres", Collect: CollectPostgres},
+   ```
+
+That's it — the `-collectors` flag, the run loop, and `-collectors=...` selection all pick it up automatically.

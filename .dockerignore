@@ -1,4 +1,5 @@
+.git
 .env
+*.log
 infrastructure
 otel_collector/otelcol-sentry
-.DS_Store
