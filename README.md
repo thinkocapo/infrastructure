@@ -26,9 +26,14 @@ docker compose up -d --build
 docker compose up -d postgres redis nginx
 ```
 
+Or rebuild and restart just `infra-monitor` on its own (starts its 3 dependencies too if they're not already running, but only rebuilds the monitor's image):
+```bash
+docker compose up -d --build infra-monitor
+```
+
 ### Run Fleet-Wide
 
-One monitor instance per host, run with `-collectors=docker`, talking to that host's Docker socket and reporting on every container the daemon can see — exactly what the Demo App above does, via `docker-compose.yml`. To run it standalone, outside of Compose:
+One monitor instance per host, talking to that host's Docker socket and reporting on every container the daemon can see — exactly what the Demo App above does, via `docker-compose.yml`. To run it standalone, outside of Compose:
 
 ```bash
 docker build -t infrastructure-monitor .
@@ -40,26 +45,26 @@ docker run -d --restart unless-stopped \
 ```
 
 Two things to know before pointing this at a real environment:
-- It has no way to scope to "just these containers" — it reports on the whole daemon, all or nothing. [Open a GitHub Issue](https://github.com/thinkocapo/infrastructure/issues/new) if you have a feature request.
+- It has no way to scope to specific containers — it reports on the whole daemon, all or nothing. [Open a GitHub Issue](https://github.com/thinkocapo/infrastructure/issues/new) if you have a feature request.
 - It requires mounting `/var/run/docker.sock` into the container, which is root-equivalent access to that host — worth raising explicitly with whoever owns security for that environment, not something to hand over quietly.
 
 ### Run Per-Target
 
-Instead of one monitor watching a whole host's containers, run one monitor instance *inside* each container (or VM) you actually want visibility into, with only the host collector enabled (`-collectors=host`). It never touches the Docker socket — `gopsutil` just reads `/proc`-level stats for wherever it's running — so it's naturally scoped to exactly one target, and there's no socket-access question to raise at all.
+Instead of one monitor watching a whole host's containers, run one monitor instance *inside* each container (or VM) you actually want visibility into, with only the host collector enabled — `gopsutil` just reads `/proc`-level stats for wherever it's running, so it never touches the Docker socket at all. That makes it naturally scoped to exactly one target, with no socket-access question to raise.
 
 Steps:
 1. Build the binary (works from source directly — no Docker image needed for this path):
    ```bash
    go build -o infrastructure-monitor .
    ```
-2. Copy `infrastructure-monitor` into whatever the target container image already builds (a `COPY` line in the customer's own Dockerfile), or drop it directly onto a VM.
+2. Copy `infrastructure-monitor` into whatever the target container image already builds (a `COPY` line in your own Dockerfile), or drop it directly onto a VM.
 3. Run it alongside the existing process, no Docker dependency at all:
    ```bash
    SENTRY_DSN=... COLLECTORS=host ./infrastructure-monitor
    ```
 4. Repeat per container or host that needs visibility. Each instance tags its metrics with its own real hostname, so multiple instances stay distinguishable in the Sentry UI without extra config.
 
-See [Security Concern](#security) for the tradeoff between this pattern and Fleet-Wide.
+[Security Concern](#security) for the tradeoff between Fleet-Wide and Per-Target.
 
 ## Sentry Metrics
 

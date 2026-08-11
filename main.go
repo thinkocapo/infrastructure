@@ -80,6 +80,8 @@ func main() {
 			reportCollectorHealth(ctx, c.Name, time.Since(start), err)
 		}
 		fmt.Println()
+		// Rest here before the next collection cycle — interval seconds
+		// (default 60, or INTERVAL_SECONDS from .env).
 		time.Sleep(time.Duration(interval) * time.Second)
 	}
 }
