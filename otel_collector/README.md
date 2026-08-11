@@ -128,3 +128,20 @@ service:
 ```
 
 This lets you filter by `source = gopsutil` or `source = docker` in the Sentry UI, matching the same tag structure used in direct SDK mode.
+
+## FAQ
+
+**Can this do OTel traces/logs?**
+
+No — `sentryexporter`'s factory only registers `exporter.WithMetrics(...)` (see `factory.go`), so it only handles `pmetric.Metrics`; it doesn't implement the trace or log exporter interfaces, and there's no plan to extend it that way. That's not actually a gap: Sentry has a native OTLP endpoint that ingests traces and logs directly, with no Sentry-specific exporter required. If you already have traces/logs flowing through a collector, there's no need to route them through a Sentry exporter at all — point the standard `otlp` exporter already built into your collector at Sentry's endpoint instead. See [Sentry's OTLP docs](https://docs.sentry.io/concepts/otlp/direct/) and [Sentry for OpenTelemetry](https://sentry.io/solutions/opentelemetry/).
+
+**Can I point this at receivers you didn't anticipate (Postgres, Kubernetes) without touching your exporter code?**
+
+Yes. `sentryexporter`'s `ConsumeMetrics` only walks the generic OTel `pmetric.Metrics` tree (ResourceMetrics → ScopeMetrics → Metric → DataPoints) — it has no idea which receiver produced that data, and doesn't need to. Add `postgresqlreceiver`, `k8sclusterreceiver`, or any other OTel receiver to your pipeline's `receivers:` config (and to `builder-config.yaml` if you're assembling your own distribution), route its output to the `sentry` exporter, and it translates whatever comes through — zero changes to `sentryexporter/`'s code required.
+
+## Config Ideas & Feature Requests
+
+- **Container scoping for `dockerstatsreceiver`.** It already supports `excluded_images` (image name, regex, or glob, with negation) to exclude specific containers — the default is every running container, no exclusions. That's still not a clean allow-list by container name, only image-based exclusion with negation as an indirect workaround — so the same "no way to scope to specific containers" concern flagged for the Go SDK's Fleet-Wide path only has a partial answer here.
+- **Retry/backoff on export failures.** `factory.go`'s `exporterhelper.NewMetrics` isn't given any `WithRetry`/`WithQueue` options today, so a failed `ConsumeMetrics` call just errors out with no automatic retry — unlike a lot of production OTel exporters.
+
+[Open a GitHub Issue](https://github.com/thinkocapo/infrastructure/issues/new) if either of these would be useful to you.

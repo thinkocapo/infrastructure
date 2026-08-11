@@ -67,6 +67,8 @@ Steps:
 
 [Security Concern](#security) for the tradeoff between Fleet-Wide and Per-Target.
 
+**Also available:** an [OTel Collector-based implementation](otel_collector/README.md) — same Per-Target/Fleet-Wide split, via `hostmetricsreceiver`/`dockerstatsreceiver` instead of `collectors/`, plus a path to add the Sentry exporter to a collector you already run.
+
 ## Sentry Metrics
 
 ### Source 1: Host (`gopsutil`)
