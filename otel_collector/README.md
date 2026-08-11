@@ -63,3 +63,36 @@ No DSN in shell history, nothing committed to source.
 | Vendor lock-in | Sentry SDK only | swap exporter to ship anywhere |
 | What to run | `go run .` from repo root | `./otelcol-sentry --config config.yaml` |
 | Good for | learning, custom metrics | production, vendor-neutral pipelines |
+
+## OTel Collector mode — adding source tags via Processor
+
+In the direct SDK mode (`go run .` from the repo root), `source` tags are set explicitly in each collector. In the OTel Collector mode, `hostmetricsreceiver` and `dockerstatsreceiver` don't emit a `source` tag by default — you'd distinguish them only by metric name (e.g. `system.cpu.utilization` vs `container.cpu.percent`).
+
+To stamp a `source` tag on each pipeline explicitly, split into two pipelines with an `attributes` processor on each:
+
+```yaml
+processors:
+  attributes/host:
+    actions:
+      - key: source
+        value: gopsutil
+        action: insert
+  attributes/docker:
+    actions:
+      - key: source
+        value: docker
+        action: insert
+
+service:
+  pipelines:
+    metrics/host:
+      receivers: [hostmetrics]
+      processors: [attributes/host]
+      exporters: [sentry]
+    metrics/docker:
+      receivers: [docker_stats]
+      processors: [attributes/docker]
+      exporters: [sentry]
+```
+
+This lets you filter by `source = gopsutil` or `source = docker` in the Sentry UI, matching the same tag structure used in direct SDK mode.

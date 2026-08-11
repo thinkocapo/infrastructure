@@ -2,7 +2,7 @@
 
 <img src="sentry_metrics.png" width="50%" alt="Sentry infrastructure metrics dashboard">
 
-Reads host metrics (CPU, memory, disk, network) from your MacBook and running Docker containers, then ships them to Sentry as application metrics.
+Reads host metrics (CPU, memory, disk, network) from wherever it's running and from Docker containers, then ships them to Sentry as application metrics.
 
 The pattern for adding more sources (Kubernetes, Postgres, Redis, etc.) is just another collector file in `collectors/` — same loop, same Sentry emit calls. One Sentry project and DSN is enough; differentiate sources with tags.
 
@@ -24,7 +24,7 @@ otelcol-contrib --config otel_collector/config.yaml  # OTel Collector mode
 ```
 main.go                       # entry point — init Sentry, run collector loop
 collectors/
-  host.go                     # macOS host metrics via gopsutil
+  host.go                     # per-target host metrics via gopsutil
   docker.go                   # Docker container metrics via Docker Engine API
 otel_collector/
   config.yaml                 # OTel Collector pipeline config
@@ -70,11 +70,39 @@ go run . -collectors=host,docker   # both (same as default)
 go run .                           # all registered collectors
 ```
 
-## Metrics
+## Production deployment: per-target vs. fleet-wide
 
-### Source 1: macOS host (`gopsutil`)
+`docker-compose.yml` and `-collectors=docker` above are for trying this repo's example locally — they're not yet the right default for pointing this at a customer's real production containers. There are two genuinely different ways to deploy this, with a real tradeoff between them:
 
-Reads directly from the macOS kernel via `gopsutil`.
+### Fleet-wide (`-collectors=docker`) — good for demos, not yet for production
+
+One monitor instance per host, talking to that host's Docker socket, reporting on every container the daemon can see. This is what `docker-compose.yml` does. Two things to know before pointing this at a real environment:
+- It has no way to scope to "just these containers" — it reports on the whole daemon, all or nothing.
+- It requires mounting `/var/run/docker.sock` into the container, which is root-equivalent access to that host — worth raising explicitly with whoever owns security for that environment, not something to hand over quietly.
+
+### Per-target (`-collectors=host`) — recommended for production today
+
+Instead of one monitor watching a whole host's containers, run one monitor instance *inside* each container (or VM) you actually want visibility into, with only the host collector enabled. It never touches the Docker socket — `gopsutil` just reads `/proc`-level stats for wherever it's running — so it's naturally scoped to exactly one target, and there's no socket-access question to raise at all.
+
+Steps:
+1. Build the binary (works from source directly — no Docker image needed for this path):
+   ```bash
+   go build -o infrastructure-monitor .
+   ```
+2. Copy `infrastructure-monitor` into whatever the target container image already builds (a `COPY` line in the customer's own Dockerfile), or drop it directly onto a VM.
+3. Run it alongside the existing process, no Docker dependency at all:
+   ```bash
+   SENTRY_DSN=... COLLECTORS=host ./infrastructure-monitor
+   ```
+4. Repeat per container or host that needs visibility. Each instance tags its metrics with its own real hostname, so multiple instances stay distinguishable in the Sentry UI without extra config.
+
+The tradeoff to be upfront about: this trades "one process watches the whole fleet" for "one process per target" — more instances to deploy and update, in exchange for no socket exposure and no all-or-nothing visibility. `-collectors=docker` stays fully available in this same binary for local testing or any environment where the socket tradeoff is acceptable — nothing about recommending the per-target pattern removes or restricts it.
+
+## Sentry Metrics
+
+### Source 1: Host (`gopsutil`)
+
+Reads directly from the target's kernel via `gopsutil` — wherever this binary happens to be running (a container, a VM, bare metal). This is the per-target collector described above (`-collectors=host`).
 
 | Metric | Tags |
 |---|---|
@@ -98,61 +126,14 @@ Reads per-container stats from the Docker daemon. Each running container gets it
 
 Docker metrics are skipped gracefully if Docker is not running.
 
-## Querying by source in the Sentry UI
+## Sentry UI
 
 In the Sentry metrics explorer, use the `source` tag to filter or group by where metrics came from. Example tag schemes as more collectors are added:
 
 ```go
-sentry.Metrics.Gauge("host.cpu.percent",   value, sentry.MetricTags({"source": "gopsutil",   "host": "macbook"}))
+sentry.Metrics.Gauge("host.cpu.percent",   value, sentry.MetricTags({"source": "gopsutil",   "host": "web-01"}))
 sentry.Metrics.Gauge("docker.cpu.percent", value, sentry.MetricTags({"source": "docker",     "container": "postgres"}))
 sentry.Metrics.Gauge("k8s.pod.memory",     value, sentry.MetricTags({"source": "kubernetes", "namespace": "default"}))
 ```
 
 In the UI: filter by `source = docker` to see only container metrics, or group by `container` to compare across containers. The `source` tag is the top-level discriminator; more specific tags (`host`, `container`, `namespace`) let you drill down within a source.
-
-## OTel Collector mode — adding source tags via Processor
-
-In the direct SDK mode (`go run .`), `source` tags are set explicitly in each collector. In the OTel Collector mode, `hostmetricsreceiver` and `dockerstatsreceiver` don't emit a `source` tag by default — you'd distinguish them only by metric name (e.g. `system.cpu.utilization` vs `container.cpu.percent`).
-
-To stamp a `source` tag on each pipeline explicitly, split into two pipelines with an `attributes` processor on each:
-
-```yaml
-processors:
-  attributes/host:
-    actions:
-      - key: source
-        value: gopsutil
-        action: insert
-  attributes/docker:
-    actions:
-      - key: source
-        value: docker
-        action: insert
-
-service:
-  pipelines:
-    metrics/host:
-      receivers: [hostmetrics]
-      processors: [attributes/host]
-      exporters: [sentry]
-    metrics/docker:
-      receivers: [docker_stats]
-      processors: [attributes/docker]
-      exporters: [sentry]
-```
-
-This lets you filter by `source = gopsutil` or `source = docker` in the Sentry UI, matching the same tag structure used in direct SDK mode.
-
-## Development - Adding a third source
-
-The collector list lives in `collectors/registry.go`. To add one (Postgres, Redis,
-Kubernetes, …):
-
-1. Write a `CollectX(ctx context.Context)` function in a new file under `collectors/`
-   (follow the shape of `host.go` / `docker.go` — read values, call `sentry.Metrics.Gauge`).
-2. Add one line to `Registry`:
-   ```go
-   {Name: "postgres", Collect: CollectPostgres},
-   ```
-
-That's it — the `-collectors` flag, the run loop, and `-collectors=...` selection all pick it up automatically.
