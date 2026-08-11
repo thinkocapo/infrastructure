@@ -1,4 +1,6 @@
 .env
 infrastructure
 otel_collector/otelcol-sentry
+otel_collector/otel_collector
+otel_collector/dist/
 .DS_Store

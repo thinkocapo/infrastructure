@@ -18,6 +18,8 @@ The key piece is `sentryexporter/` — a custom OTel exporter that:
 3. Translates each data point into a `sentry.Metrics.Gauge()` call
 4. Tags are pulled from both resource-level attributes (e.g. `host.name`) and datapoint-level attributes (e.g. `container.name`)
 
+`sentryexporter/` is its own Go module (`otel_collector/sentryexporter/go.mod`) — a real, independent OTel Collector exporter component, not something that only works inside this repo's custom `main.go` binary. That's what makes the "add it to your own collector" path below possible.
+
 ### What OTel data types map to what
 
 | OTel metric type | Mapped to Sentry |
@@ -30,22 +32,26 @@ The key piece is `sentryexporter/` — a custom OTel exporter that:
 
 ```
 otel_collector/
-  main.go                  # custom collector binary — wires receivers + sentryexporter
-  config.yaml              # pipeline config
+  main.go                  # demo binary — wires receivers + sentryexporter
+  config.yaml              # demo pipeline config
+  builder-config.yaml      # ocb manifest — assembles sentryexporter into its own distribution
   sentryexporter/
+    go.mod, go.sum         # independent module — no dependency on the rest of this repo
     exporter.go            # ConsumeMetrics() — translates OTel metrics to Sentry
     factory.go             # registers the exporter with the collector
     config.go              # DSN config
 ```
 
-## Build and run
+## Run Demo
 
-The OTel Collector binary reads `SENTRY_DSN` from the shell environment — it doesn't use `godotenv` like `main.go` does. Use `source` to load the root `.env` file (already gitignored) before running:
+The demo binary hand-wires `hostmetricsreceiver`, `dockerstatsreceiver`, and `sentryexporter` together in Go code — the fastest way to try this out locally, but not how you'd add `sentryexporter` to a collector you already run (see below for that).
+
+It reads `SENTRY_DSN` from the shell environment — it doesn't use `godotenv` like the root `main.go` does. Use `source` to load the root `.env` file (already gitignored) before running:
 
 ```bash
 cd otel_collector
 
-# build the custom collector binary
+# build the demo binary
 go build -o otelcol-sentry .
 
 # load DSN from root .env and run
@@ -53,6 +59,32 @@ source ../.env && ./otelcol-sentry --config config.yaml
 ```
 
 No DSN in shell history, nothing committed to source.
+
+## Add sentryexporter to your own OTel Collector
+
+`builder-config.yaml` is a manifest for the [OpenTelemetry Collector Builder](https://github.com/open-telemetry/opentelemetry-collector/tree/main/cmd/builder) (`ocb`) — the standard tool most real OTel Collector distributions (including the official Contrib distro) use to assemble a binary from a declarative list of components. This proves `sentryexporter` is a real, pluggable component: the manifest below builds a distribution from official upstream receivers plus `sentryexporter`, side by side, the same way you'd add it to a collector you already build and run.
+
+```bash
+# install ocb once, matching this repo's pinned collector version
+go install go.opentelemetry.io/collector/cmd/builder@v0.153.0
+
+# this repo has a root go.work for local multi-module development —
+# GOWORK=off makes ocb resolve modules on its own instead
+cd otel_collector
+GOWORK=off "$(go env GOPATH)/bin/builder" --config builder-config.yaml
+```
+
+This produces `otel_collector/dist/otelcol-sentry-custom` (gitignored — it's a build artifact). Verify `sentry` registered as a component, alongside the official ones:
+```bash
+./dist/otelcol-sentry-custom components
+```
+
+`sentryexporter` isn't tagged/published yet, so the manifest's `replaces` entry points at the local checkout instead of a real module version:
+```yaml
+replaces:
+  - github.com/thinkocapo/infrastructure/otel_collector/sentryexporter => ../sentryexporter
+```
+Once a release is tagged, drop `replaces` and pin the exporter's `gomod` line to that version instead — an external consumer's own manifest would look identical otherwise.
 
 ## Comparing the two modes
 
