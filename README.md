@@ -2,36 +2,7 @@
 
 <img src="sentry_metrics.png" width="50%" alt="Sentry infrastructure metrics dashboard">
 
-Reads host metrics (CPU, memory, disk, network) from wherever it's running and from Docker containers, then ships them to Sentry as application metrics.
-
-The pattern for adding more sources (Kubernetes, Postgres, Redis, etc.) is just another collector file in `collectors/` — same loop, same Sentry emit calls. One Sentry project and DSN is enough; differentiate sources with tags.
-
-## Two modes
-
-Both point at the same Sentry project:
-
-```bash
-go run .                                              # direct SDK mode
-otelcol-contrib --config otel_collector/config.yaml  # OTel Collector mode
-```
-
-**Direct SDK** — collection logic written in Go (`collectors/`), ships via Sentry SDK. More control, easier to hack on.
-
-**OTel Collector** — pre-built receivers handle collection, ships via a custom Go exporter (`otel_collector/sentryexporter/`). The exporter was written from scratch since no official Sentry OTel metrics exporter exists — it receives `pmetric.Metrics` batches from the collector pipeline and translates each data point into a `sentry.Metrics.Gauge()` call. Vendor-neutral, closer to how production infra monitoring is set up. See `otel_collector/README.md` for setup.
-
-## Structure
-
-```
-main.go                       # entry point — init Sentry, run collector loop
-collectors/
-  host.go                     # per-target host metrics via gopsutil
-  docker.go                   # Docker container metrics via Docker Engine API
-otel_collector/
-  config.yaml                 # OTel Collector pipeline config
-  README.md                   # setup instructions for OTel mode
-Dockerfile                    # builds the monitor into a container image (local build only)
-docker-compose.yml            # example containers to monitor (postgres, redis, nginx) + optional monitor service
-```
+Collects host metrics (CPU, memory, disk, network) and Docker container stats, then ships them to Sentry as application metrics — using the Sentry SDK directly, with no separate monitoring agent to deploy. See `collectors/` for how it's done via `gopsutil` and the Docker Engine API.
 
 ## Setup
 ```bash
@@ -64,7 +35,7 @@ Each source is a named collector (`host`, `docker`). Pick which ones run with th
 `-collectors` flag (or the `COLLECTORS` env var). Order doesn't matter; empty = all.
 
 ```bash
-go run . -collectors=host          # macOS host metrics only
+go run . -collectors=host          # host metrics only
 go run . -collectors=docker        # Docker container metrics only
 go run . -collectors=host,docker   # both (same as default)
 go run .                           # all registered collectors
