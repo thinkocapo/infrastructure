@@ -7,6 +7,7 @@ Collects host metrics (CPU, memory, disk, network) and Docker container stats, t
 ## Setup
 ```bash
 # you'll need a SENTRY_DSN to add to .env below
+# collection interval defaults to 60s — tune it via INTERVAL_SECONDS in .env
 go mod tidy
 cp .env.example .env
 ```
