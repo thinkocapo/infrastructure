@@ -1,6 +1,6 @@
 # OTel Collector mode
 
-An alternative to the Go SDK approach in `main.go`. Instead of writing collection logic in code, the OTel Collector handles it via config — with pre-built receivers for host metrics and Docker stats.
+An alternative to the Go SDK approach in `main.go`. Instead of writing collection logic in code, the OTel Collector handles it via config — with pre-built receivers for host metrics and Docker stats. Same Per-Target/Fleet-Wide split as the root README, via `hostmetricsreceiver`/`dockerstatsreceiver` instead of `collectors/`, plus a path to add the Sentry exporter to a collector you already run.
 
 Both modes collect the same data and ship to the same Sentry project. This one is closer to how real production infra monitoring is set up.
 
