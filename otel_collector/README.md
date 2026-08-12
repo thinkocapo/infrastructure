@@ -4,6 +4,8 @@ An alternative to the Go SDK approach in `main.go`. Instead of writing collectio
 
 Both modes collect the same data and ship to the same Sentry project. This one is closer to how real production infra monitoring is set up.
 
+**Not super tested yet.** This has only been run in short, manual smoke tests so far — not continuously, not under real load, not against a real customer's pipeline. See Config Ideas & Feature Requests below for the known gaps (no histogram support, `Sum`→`Gauge` semantic loss, no retry/backoff, partial-only container scoping).
+
 ## How it works
 
 ```

@@ -12,16 +12,6 @@ Not formally benchmarked yet with real numbers — that's on the roadmap (see De
 
 Once real numbers exist (CPU/memory of the `infra-monitor` container or process itself, ideally from a real VM rather than a laptop), they belong here instead of this qualitative description.
 
-## Troubleshooting
-
-Real failure modes hit and fixed during development — not hypothetical:
-
-- **`[docker] unavailable: ...` / Docker socket unreachable.** `CollectDocker` (or `dockerstatsreceiver` in OTel mode) can't reach the daemon. Self-monitoring reports `monitor.collector.up = 0` and captures a Sentry issue tagged `collector: docker` when this happens — check that Docker is running, and that `/var/run/docker.sock` is actually mounted if you're running `infra-monitor` itself as a container.
-- **Missing `SENTRY_DSN`.** Direct SDK mode fails fast: `log.Fatal("SENTRY_DSN is required")`. OTel Collector mode fails differently — it warns `Configuration references unset environment variable`, then hard-errors with `invalid configuration: exporters::sentry: dsn is required`. Same root cause, different failure shape depending on which implementation you're running.
-- **`source ../.env` doesn't actually set the DSN when running the OTel demo binary.** `.env` doesn't use `export`, so a plain `source` only sets a shell variable — it isn't inherited by the child process. Use `set -a; source ../.env; set +a` instead (or `export $(cat ../.env | xargs)`), so the variables actually propagate.
-- **Building an OTel Collector distribution via `ocb` fails with `main module ... does not contain package ...`.** This repo has a root `go.work` for local multi-module development, which captures ocb's generated output directory as if it were part of the root module. Run `builder` with `GOWORK=off` to bypass the workspace for that build.
-- **`host` tag shows `unknown`.** `HostTag()` falls back to `"unknown"` when `os.Hostname()` itself fails — rare, but can happen in a locked-down container. If you see it, check whether the environment restricts the hostname syscall.
-
 ## Security
 
 **Docker socket access.** `-collectors=docker` (Fleet-Wide) requires mounting `/var/run/docker.sock` into the monitor's container, which is root-equivalent access to that host — a process with access to that socket can create, exec into, or mount the host filesystem into any container. Worth raising explicitly with whoever owns security for a given environment, not something to hand over quietly.
@@ -44,3 +34,13 @@ Known gaps surfaced so far, not yet built — [open a GitHub Issue](https://gith
 ### Using this alongside Sentry SDKs
 
 *Coming soon.* Most people trying this out are probably already running Sentry SDKs somewhere in their application stack for error monitoring and performance monitoring — worth writing up how this infrastructure monitor fits alongside that, plus guidance on distributed tracing setups so the two stories connect instead of living in separate silos.
+
+## Troubleshooting
+
+Real failure modes hit and fixed during development — not hypothetical:
+
+- **`[docker] unavailable: ...` / Docker socket unreachable.** `CollectDocker` (or `dockerstatsreceiver` in OTel mode) can't reach the daemon. Self-monitoring reports `monitor.collector.up = 0` and captures a Sentry issue tagged `collector: docker` when this happens — check that Docker is running, and that `/var/run/docker.sock` is actually mounted if you're running `infra-monitor` itself as a container.
+- **Missing `SENTRY_DSN`.** Direct SDK mode fails fast: `log.Fatal("SENTRY_DSN is required")`. OTel Collector mode fails differently — it warns `Configuration references unset environment variable`, then hard-errors with `invalid configuration: exporters::sentry: dsn is required`. Same root cause, different failure shape depending on which implementation you're running.
+- **`source ../.env` doesn't actually set the DSN when running the OTel demo binary.** `.env` doesn't use `export`, so a plain `source` only sets a shell variable — it isn't inherited by the child process. Use `set -a; source ../.env; set +a` instead (or `export $(cat ../.env | xargs)`), so the variables actually propagate.
+- **Building an OTel Collector distribution via `ocb` fails with `main module ... does not contain package ...`.** This repo has a root `go.work` for local multi-module development, which captures ocb's generated output directory as if it were part of the root module. Run `builder` with `GOWORK=off` to bypass the workspace for that build.
+- **`host` tag shows `unknown`.** `HostTag()` falls back to `"unknown"` when `os.Hostname()` itself fails — rare, but can happen in a locked-down container. If you see it, check whether the environment restricts the hostname syscall.

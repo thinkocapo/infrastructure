@@ -2,7 +2,7 @@
 
 <img src="sentry_metrics.png" width="50%" alt="Sentry infrastructure metrics dashboard">
 
-Collects host metrics (CPU, memory, disk, network) and Docker container stats, then ships them to Sentry as application metrics — using the Sentry SDK directly, with no separate monitoring agent to deploy. See `collectors/` for how it's done via `gopsutil` and the Docker Engine API. There's also a OTel Collector-based [implementation](otel_collector/README.md) available. 
+Collects host metrics (CPU, memory, disk, network) and Docker container stats, then ships them to Sentry as application metrics — using the Sentry SDK directly, with no separate monitoring agent to deploy. See `collectors/` for how it's done via `gopsutil` and the Docker Engine API. There's also a OTel Collector-based [implementation](otel_collector/README.md) available. No Kubernetes support yet in either implementation — that's a real collector/receiver to build, not a config tweak. I'm looking for initial feedback on the current state of this project first.
 
 [Sentry Metrics & Sentry UI](#sentry-metrics)
 
