@@ -4,7 +4,7 @@ An alternative to the Go SDK approach in `main.go`. Instead of writing collectio
 
 Both modes collect the same data and ship to the same Sentry project. This one is closer to how real production infra monitoring is set up.
 
-**Not super tested yet.** This has only been run in short, manual smoke tests so far — not continuously, not under real load, not against a real customer's pipeline. See Config Ideas & Feature Requests below for the known gaps (no histogram support, `Sum`→`Gauge` semantic loss, no retry/backoff, partial-only container scoping).
+**Not super tested yet.** This has only been run in short, manual smoke tests so far — not continuously, not under real load, not against a real customer's pipeline. See Config Ideas & Feature Requests below for the known gaps (no histogram support, no retry/backoff, partial-only container scoping).
 
 ## How it works
 
@@ -17,7 +17,7 @@ dockerstatsreceiver  }
 The key piece is `sentryexporter/` — a custom OTel exporter that:
 1. Receives OTel `pmetric.Metrics` batches from the collector pipeline
 2. Walks the metrics tree (ResourceMetrics → ScopeMetrics → Metric → DataPoints)
-3. Translates each data point into a `sentry.Metrics.Gauge()` call
+3. Translates each data point into a `Meter.Gauge()` or `Meter.Count()` call, depending on the OTel metric type
 4. Tags are pulled from both resource-level attributes (e.g. `host.name`) and datapoint-level attributes (e.g. `container.name`)
 
 `sentryexporter/` is its own Go module (`otel_collector/sentryexporter/go.mod`) — a real, independent OTel Collector exporter component, not something that only works inside this repo's custom `main.go` binary. That's what makes the "add it to your own collector" path below possible.
@@ -26,8 +26,8 @@ The key piece is `sentryexporter/` — a custom OTel exporter that:
 
 | OTel metric type | Mapped to Sentry |
 |---|---|
-| `Gauge` | `sentry.Metrics.Gauge()` |
-| `Sum` (counter) | `sentry.Metrics.Gauge()` (Sentry has no counter type) |
+| `Gauge` | `Meter.Gauge()` |
+| `Sum` (counter) | `Meter.Count()` |
 | `Histogram` | skipped (not supported yet) |
 
 ## Files
@@ -145,5 +145,6 @@ Yes. `sentryexporter`'s `ConsumeMetrics` only walks the generic OTel `pmetric.Me
 
 - **Container scoping for `dockerstatsreceiver`.** It already supports `excluded_images` (image name, regex, or glob, with negation) to exclude specific containers — the default is every running container, no exclusions. That's still not a clean allow-list by container name, only image-based exclusion with negation as an indirect workaround — so the same "no way to scope to specific containers" concern flagged for the Go SDK's Fleet-Wide path only has a partial answer here.
 - **Retry/backoff on export failures.** `factory.go`'s `exporterhelper.NewMetrics` isn't given any `WithRetry`/`WithQueue` options today, so a failed `ConsumeMetrics` call just errors out with no automatic retry — unlike a lot of production OTel exporters.
+- **No histogram support** -- exporter.go explicitly skips Histogram/ExponentialHistogram/Summary types entirely; only Gauge and Sum get translated.
 
 [Open a GitHub Issue](https://github.com/thinkocapo/infrastructure/issues/new) if either of these would be useful to you.

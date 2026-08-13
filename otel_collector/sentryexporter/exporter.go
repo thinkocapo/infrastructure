@@ -77,9 +77,10 @@ func emitMetric(m sentry.Meter, metric pmetric.Metric, baseTags map[string]strin
 		for i := 0; i < dps.Len(); i++ {
 			dp := dps.At(i)
 			attrs := buildAttrs(baseTags, dp.Attributes())
-			// Sentry has no counter type — map sums to gauge
-			m.Gauge(name, dp.DoubleValue(), sentry.WithAttributes(attrs...))
-			fmt.Printf("  [otel→sentry] sum→gauge %s=%.2f\n", name, dp.DoubleValue())
+			// OTel Sum (a monotonic counter) maps directly to Sentry's counter type.
+			count := int64(dp.DoubleValue())
+			m.Count(name, count, sentry.WithAttributes(attrs...))
+			fmt.Printf("  [otel→sentry] sum→count %s=%d\n", name, count)
 		}
 
 	default:
