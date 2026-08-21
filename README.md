@@ -46,10 +46,6 @@ docker run -d --restart unless-stopped \
   infrastructure-monitor
 ```
 
-Two things to know before pointing this at a real environment:
-- It has no way to scope to specific containers — it reports on the whole daemon, all or nothing. [Open a GitHub Issue](https://github.com/thinkocapo/infrastructure/issues/new).
-- [Security Concern](docs/SecurityConcerns.md) on mounting '.sock' into the container.
-
 ### Developers: Run Per-Target
 
 Instead of one monitor watching a whole host's containers, run one monitor instance *inside* each container (or VM) you actually want visibility into, with only the host collector enabled — `gopsutil` just reads `/proc`-level stats for wherever it's running, so it never touches the Docker socket at all. That makes it naturally scoped to exactly one target, with no socket-access question to raise.
