@@ -1,6 +1,12 @@
 # Handbook
 
-The questions that come up once someone's actually evaluating this — where this is headed, and what to check elsewhere in `/docs`. See [troubleshooting.md](troubleshooting.md) for what breaks and how to fix it, [SecurityConcerns.md](SecurityConcerns.md) for the security tradeoffs, and [BenchmarkingOverhead.md](BenchmarkingOverhead.md) for performance overhead. Two ways to run this exist: **Fleet-Wide** (one process, watches a whole host's containers) and **Per-Target** (one process per target, no Docker involved at all) — see the root [README](../README.md#run) if those terms are new.
+The questions that come up once someone's actually evaluating this — where this is headed, and what to check elsewhere in `/docs`. See [troubleshooting.md](troubleshooting.md) for what breaks and how to fix it. Two ways to run this exist: **Fleet-Wide** (one process, watches a whole host's containers) and **Per-Target** (one process per target, no Docker involved at all) — see the root [README](../README.md#run) if those terms are new.
+
+## Benchmarking Overhead
+[BenchmarkingOverhead.md](BenchmarkingOverhead.md) for performance overhead.
+
+## Security Concerns
+[SecurityConcerns.md](SecurityConcerns.md) for the security tradeoffs.
 
 ## Development
 
@@ -14,6 +20,7 @@ Known gaps surfaced so far, not yet built — [open a GitHub Issue](https://gith
 - Tagged releases for `otel_collector/sentryexporter`, so an external `ocb` manifest can pin a real version instead of a local `replaces` path.
 - Histogram support in the OTel exporter (currently skipped).
 - Real, measured performance-overhead numbers (see [BenchmarkingOverhead.md](BenchmarkingOverhead.md)).
+- running Per-Target on a cloud VM
 
 ### Using this alongside Sentry SDKs
 

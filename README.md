@@ -2,9 +2,12 @@
 
 Collects host metrics (CPU, memory, disk, network) and Docker container stats, then ships them to Sentry as application metrics — using the Sentry SDK directly, with no separate monitoring agent to deploy. See `collectors/` for how it's done via `gopsutil` and the Docker Engine API. There's also a OTel Collector-based [implementation](otel_collector/README.md) available. No Kubernetes support yet in either implementation — that's a real collector/receiver to build, not a config tweak. I'm looking for initial feedback on the current state of this project first.
 
-[Sentry Metrics](docs/sentry-metrics.md)
-
 [Handbook in docs/ covers Overhead, Troubleshooting, Security, Roadmap, Sentry Overview](docs/HANDBOOK.md).
+
+## Sentry Metrics
+[Sentry Metrics](./docs/sentry-metrics.md)  
+
+<img src="./sentry_metrics.png" width="50%" alt="Sentry infrastructure metrics dashboard">
 
 ## Setup
 ```bash
@@ -52,7 +55,7 @@ Two things to know before pointing this at a real environment:
 Instead of one monitor watching a whole host's containers, run one monitor instance *inside* each container (or VM) you actually want visibility into, with only the host collector enabled — `gopsutil` just reads `/proc`-level stats for wherever it's running, so it never touches the Docker socket at all. That makes it naturally scoped to exactly one target, with no socket-access question to raise.
 
 Steps:
-1. Build the binary (works from source directly — no Docker image needed for this path):
+1. Build the binary:
    ```bash
    go build -o infrastructure-monitor .
    ```
@@ -83,4 +86,3 @@ Less a strict 1-2-3 order, more a set of things to work through:
 2. Benchmark overhead — see [docs/BenchmarkingOverhead.md](docs/BenchmarkingOverhead.md).
 3. Test on-call/alerting integration.
 4. Kubernetes is not yet supported.
-5. Replacing your existing monitoring agent — run this side-by-side with your current Datadog/New Relic agent first, to compare data quality before cutting over.
