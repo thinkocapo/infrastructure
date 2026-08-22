@@ -1,6 +1,29 @@
 package collectors
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
+
+func TestContainerAllowlist(t *testing.T) {
+	t.Run("unset means no filtering", func(t *testing.T) {
+		os.Unsetenv("CONTAINERS")
+		if got := containerAllowlist(); got != nil {
+			t.Errorf("containerAllowlist() = %v, want nil", got)
+		}
+	})
+
+	t.Run("comma-separated names become the allow set", func(t *testing.T) {
+		os.Setenv("CONTAINERS", "postgres, redis")
+		defer os.Unsetenv("CONTAINERS")
+
+		got := containerAllowlist()
+		want := map[string]bool{"postgres": true, "redis": true}
+		if len(got) != len(want) || !got["postgres"] || !got["redis"] {
+			t.Errorf("containerAllowlist() = %v, want %v", got, want)
+		}
+	})
+}
 
 func TestCalcCPUPercent(t *testing.T) {
 	cases := []struct {

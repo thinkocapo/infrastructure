@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
@@ -32,10 +33,14 @@ func CollectDocker(ctx context.Context) error {
 
 	m := sentry.NewMeter(ctx)
 	host := HostTag()
+	allow := containerAllowlist()
 	var errs []error
 
 	for _, c := range result.Items {
 		name := c.Names[0][1:] // strip leading "/"
+		if allow != nil && !allow[name] {
+			continue
+		}
 
 		resp, err := cli.ContainerStats(ctx, c.ID, dockerclient.ContainerStatsOptions{Stream: false})
 		if err != nil {
@@ -73,6 +78,21 @@ func CollectDocker(ctx context.Context) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// containerAllowlist reads CONTAINERS (comma-separated container names) and
+// returns the set to allow, or nil if unset — meaning no filtering, every
+// running container gets reported, matching the pre-existing default.
+func containerAllowlist() map[string]bool {
+	names := ParseSelection(os.Getenv("CONTAINERS"))
+	if len(names) == 0 {
+		return nil
+	}
+	allow := make(map[string]bool, len(names))
+	for _, n := range names {
+		allow[n] = true
+	}
+	return allow
 }
 
 func calcCPUPercent(stats dockerStatsJSON) float64 {

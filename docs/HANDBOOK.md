@@ -14,13 +14,11 @@ The questions that come up once someone's actually evaluating this — where thi
 
 Known gaps surfaced so far, not yet built — [open a GitHub Issue](https://github.com/thinkocapo/infrastructure/issues/new) if any of these matter to you:
 
-- A container/resource allow-list for Fleet-Wide, in both implementations — today it's all-or-nothing on whatever daemon it's pointed at (`dockerstatsreceiver`'s `excluded_images` gets partway there for OTel mode, but it's image-based exclusion, not a name-based allow-list).
-- Retry/backoff on the OTel exporter — `exporterhelper.NewMetrics` isn't given `WithRetry`/`WithQueue` options today, so a failed export just errors out.
+- A name-based container allow-list for OTel mode's `dockerstatsreceiver` — fixed for the direct SDK's Fleet-Wide path (`CONTAINERS` env var), but `dockerstatsreceiver` only has `excluded_images` (image-based exclusion), not a name-based allow-list.
 - A Kubernetes source — genuinely new work in either implementation, not a config change.
 - Tagged releases for `otel_collector/sentryexporter`, so an external `ocb` manifest can pin a real version instead of a local `replaces` path.
 - Histogram support in the OTel exporter (currently skipped).
-- Real, measured performance-overhead numbers (see [BenchmarkingOverhead.md](BenchmarkingOverhead.md)).
-- running Per-Target on a cloud VM
+- running Per-Target on a cloud VM, and re-running [BenchmarkingOverhead.md](BenchmarkingOverhead.md)'s numbers there instead of on a laptop.
 
 ### Using this alongside Sentry SDKs
 

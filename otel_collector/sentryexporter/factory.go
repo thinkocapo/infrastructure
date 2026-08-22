@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/config/configoptional"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 )
@@ -43,5 +45,10 @@ func createMetricsExporter(
 		exporterhelper.WithStart(exp.Start),
 		exporterhelper.WithShutdown(exp.Shutdown),
 		exporterhelper.WithCapabilities(exp.Capabilities()),
+		// A failed ConsumeMetrics call retries with backoff instead of
+		// just erroring out, and queues requests so a transient outage
+		// doesn't silently drop data.
+		exporterhelper.WithRetry(configretry.NewDefaultBackOffConfig()),
+		exporterhelper.WithQueue(configoptional.Some(exporterhelper.NewDefaultQueueConfig())),
 	)
 }

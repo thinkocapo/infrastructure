@@ -42,9 +42,14 @@ docker build -t infrastructure-monitor .
 docker run -d --restart unless-stopped \
   --env-file .env \
   -e COLLECTORS=docker \
+  -e CONTAINERS=name1,name2 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   infrastructure-monitor
 ```
+
+`CONTAINERS` is optional — a comma-separated allow-list of container names; unset means every container on the daemon, as before. Drop it if you want everything.
+
+`docker-compose.yml` uses a safer pattern than the raw socket mount above: a read-only [`docker-proxy`](docker-compose.yml) service fronts the real socket, and `infra-monitor` talks to that instead (`DOCKER_HOST=tcp://docker-proxy:2375`) — no direct socket mount on the monitor at all. See [Security Concerns](docs/SecurityConcerns.md) for why that matters.
 
 ### Developers: Run Per-Target
 

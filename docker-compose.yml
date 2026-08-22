@@ -16,15 +16,31 @@ services:
     ports:
       - "8080:80"
 
+  # Read-only proxy in front of the real Docker socket — infra-monitor talks
+  # to this instead of getting root-equivalent access to the raw socket.
+  # Only CONTAINERS=1 is enabled (list + stats, both GET); everything else
+  # (exec, create, mount, volumes, networks, ...) stays off by default.
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    environment:
+      CONTAINERS: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
   infra-monitor:
     build: .
     env_file: .env
     environment:
       COLLECTORS: docker
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      DOCKER_HOST: tcp://docker-proxy:2375
+      # Scope to this project's own containers — without this, Fleet-Wide
+      # reports on every container the daemon can see, including ones
+      # from unrelated projects on the same host.
+      CONTAINERS: infrastructure-postgres-1,infrastructure-redis-1,infrastructure-nginx-1,infrastructure-infra-monitor-1,infrastructure-docker-proxy-1
     restart: unless-stopped
     depends_on:
       - postgres
       - redis
       - nginx
+      - docker-proxy

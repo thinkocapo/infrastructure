@@ -4,7 +4,7 @@ An alternative to the Go SDK approach in `main.go`. Instead of writing collectio
 
 Both modes collect the same data and ship to the same Sentry project. This one is closer to how real production infra monitoring is set up.
 
-**Not super tested yet.** This has only been run in short, manual smoke tests so far — not continuously, not under real load, not against a real customer's pipeline. See Config Ideas & Feature Requests below for the known gaps (no histogram support, no retry/backoff, partial-only container scoping).
+**Not super tested yet.** This has only been run in short, manual smoke tests so far — not continuously, not under real load, not against a real customer's pipeline. See Config Ideas & Feature Requests below for the known gaps (no histogram support, partial-only container scoping).
 
 ## How it works
 
@@ -143,8 +143,9 @@ Yes. `sentryexporter`'s `ConsumeMetrics` only walks the generic OTel `pmetric.Me
 
 ## Config Ideas & Feature Requests
 
-- **Container scoping for `dockerstatsreceiver`.** It already supports `excluded_images` (image name, regex, or glob, with negation) to exclude specific containers — the default is every running container, no exclusions. That's still not a clean allow-list by container name, only image-based exclusion with negation as an indirect workaround — so the same "no way to scope to specific containers" concern flagged for the Go SDK's Fleet-Wide path only has a partial answer here.
-- **Retry/backoff on export failures.** `factory.go`'s `exporterhelper.NewMetrics` isn't given any `WithRetry`/`WithQueue` options today, so a failed `ConsumeMetrics` call just errors out with no automatic retry — unlike a lot of production OTel exporters.
+- **Container scoping for `dockerstatsreceiver`.** It already supports `excluded_images` (image name, regex, or glob, with negation) to exclude specific containers — the default is every running container, no exclusions. That's still not a clean allow-list by container name, only image-based exclusion with negation as an indirect workaround. The Go SDK's Fleet-Wide path now has a real name-based allow-list (`CONTAINERS` env var) — this one doesn't yet.
 - **No histogram support** -- exporter.go explicitly skips Histogram/ExponentialHistogram/Summary types entirely; only Gauge and Sum get translated.
 
-[Open a GitHub Issue](https://github.com/thinkocapo/infrastructure/issues/new) if either of these would be useful to you.
+[Open a GitHub Issue](https://github.com/thinkocapo/infrastructure/issues/new) if this would be useful to you.
+
+Fixed: retry/backoff on export failures — `factory.go`'s `exporterhelper.NewMetrics` now gets `WithRetry`/`WithQueue` options, so a failed `ConsumeMetrics` call retries with backoff and queues instead of just erroring out.
